@@ -1,0 +1,20 @@
+[run]
+branch = True
+
+command_line: -m unittest
+
+#Source vs include ??? I'll stick to source for now 
+source =
+  ganondorf
+
+omit =
+  tests/*
+
+[report]
+#exclude_lines = 
+  #Add stuff here as and when you notice it so you can observe the effect
+
+ignore_errors = True
+
+[html]
+directory = coverage_html_report
