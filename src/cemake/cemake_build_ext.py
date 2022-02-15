@@ -14,6 +14,8 @@ from .cemake_extension import CMakeExtension
 
 __all__ = ['cmake_build_ext']
 
+
+
 class cmake_build_ext(build_ext):
   #TODO: decide whether I may as well override this too due to CMAKE usage
   def run(self): 
@@ -96,6 +98,12 @@ class cmake_build_ext(build_ext):
     self.check_extensions_list(self.extensions)
 
 
+  def get_extension_build_directory(self, extension_name):
+    return os.path.dirname(
+        os.path.abspath(
+            self.get_ext_fullpath(extension_name)
+            )
+        )
 
   def build_extensions(self):
     # Ensure that CMake is present and working
@@ -110,8 +118,8 @@ class cmake_build_ext(build_ext):
     # print('***', *(self.user_options), sep="\n")
     for extension in self.extensions:
       self.package = extension.package_name
-      
-      extension_dir = os.path.dirname(self.get_ext_fullpath(extension.name))
+
+      extension_dir = self.get_extension_build_directory(extension.name)
 
       config = 'Debug' if self.debug else 'Release'
       #TODO: Warn windows users that config=Debug causes error on cmake --build
@@ -121,7 +129,7 @@ class cmake_build_ext(build_ext):
           f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config.upper()}={extension_dir}',
           # Needed for windows (more specifically .dll platforms).
           # It is safe to leave for all systems although will erroneously
-          # add any .exe's created, which shouldn't extis anyway
+          # add any .exe's created, which shouldn't exist anyway
           #
           # May remove for .so systems but without further testing it is
           # an unnecessary risk to remove 

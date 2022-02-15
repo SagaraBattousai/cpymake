@@ -1,3 +1,9 @@
-import setuptools
+from setuptools import setup
 
-setuptools.setup()
+setup(
+    entry_points={
+        "distutils.commands": [
+            "cemake = cemake.cemake_build_ext:cmake_build_ext",
+        ],
+    },
+)
