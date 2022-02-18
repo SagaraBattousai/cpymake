@@ -1,14 +1,11 @@
-""" This module contains distutils extension subclasses to allow describing
+""" This module contains setuptools extension subclasses to allow describing
 CMake builds to generate libraries for python extension modules
 
 """
 
-import os
+import pathlib
 
-# distutils is better than setuptools for this use case, I've been
-# debating this all night, as it is more basic;
-# however if distutils is removed then there will be a problem.
-from distutils.extension import Extension
+from setuptools.extension import Extension
 
 __all__ = ['CMakeExtension']
 
@@ -32,15 +29,13 @@ class CMakeExtension(Extension):
     you use different CMakeLists.txt in different directories. This may change
     if it causes extra work however for now it seems acdeptable.
 
-  inplace : bool, default: True
-    Whether to place built extensions in a the package passed by 
-    ``package_name`` or put them in the root of the project build.
-
   """
   def __init__(self, package_name:str, cmake_lists_dir:str='.',
-               inplace:bool=True, **kwargs):
-    Extension.__init__(self, name='', sources=[], **kwargs)
-    
-    self.package_name = package_name
-    self.cmake_lists_dir = os.path.abspath(cmake_lists_dir)
-
+               *args, **kwargs):
+    #May need to do something clever with name, inc adding to constructor.
+    super().__init__(name='', sources=[], *args, **kwargs)
+    # Could leave off and just add to cfg for build_ext package
+    #Ah what if even better we say module as there are multiple modules per
+    # package, but then wouldnt you need more CMakeLists???
+    self.package_name = package_name 
+    self.cmake_lists_dir = pathlib.Path(cmake_lists_dir).resolve()
