@@ -29,7 +29,7 @@ Repository = "https://github.com/SagaraBattousai/CEMake.git"
 #Changelog = "https://github.com/me/spam/blob/master/CHANGELOG.md"
 
 [project.entry-points."distutils.commands"]
-cemake = "cemake.cemake_build_ext:CemakeBuildExt"
+cemake = "cemake.cemake_build_ext:CeMakeBuildExt"
 
 [tool.black]
 preview = true

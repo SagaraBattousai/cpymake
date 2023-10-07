@@ -14,7 +14,7 @@ from setuptools.command.build_ext import build_ext
 from cemake.cemake_extension import CeMakeExtension
 
 
-class CemakeBuildExt(build_ext):
+class CeMakeBuildExt(build_ext):
     """Cemake's build_ext class that can be used as a plugin for setuptools
     to build extension modules that use CMake as their
     build (generator) system
@@ -23,7 +23,6 @@ class CemakeBuildExt(build_ext):
     def __init__(self, dist):
         super().__init__(dist)
         self.extension_suffix = sysconfig.get_config_var("EXT_SUFFIX")
-        self.build_temp_path = None
 
     # override
     def initialize_options(self):
@@ -31,19 +30,19 @@ class CemakeBuildExt(build_ext):
         overwritten during the build
         """
         super().initialize_options()
-        self.build_temp_path = (
-            self.build_temp_path
-            if self.build_temp_path
-            else pathlib.Path(self.build_temp)
-        )
+        self.build_temp_path = None
 
     # override
     def finalize_options(self):
         """For initialising variables once the other options have been
         finalised
         """
+        # print("Before:", self.extensions[0].cmake_lists_root_dir)
         super().finalize_options()
-        self.build_temp_path = pathlib.Path(self.build_temp)
+        if self.build_temp_path is None:
+            self.build_temp_path = (  # pylint: disable=attribute-defined-outside-init
+                pathlib.Path(self.build_temp).resolve()
+            )
 
     # Don't call super as we need all custom behaviour
     # override
@@ -79,6 +78,8 @@ class CemakeBuildExt(build_ext):
         # First, sanity-check the 'extensions' list
         self.check_extensions_list(self.extensions)
 
+        print(self.inplace)
+
         for extension in self.extensions:
             # Looks dodgy but it's been years since I made this so...
             # Actually maybe not...
@@ -107,20 +108,17 @@ class CemakeBuildExt(build_ext):
             if extension.generator:
                 cmake_args.append(f"-G {extension.generator}")
 
-            # Should never be true as it is set by finalize_options()
-            # but typechecker cannot see that.
-            if not self.build_temp_path:
-                self.build_temp_path = pathlib.Path(self.build_temp)
-
             if not self.build_temp_path.exists():
                 self.build_temp_path.mkdir(parents=True)
 
+            print(self.build_temp_path)
+            print("WHat What", extension.cmake_lists_root_dir)
             # Config -> outputs in our temp dir
             subprocess.run(
                 ["cmake", extension.cmake_lists_root_dir, *cmake_args],
                 cwd=self.build_temp,
                 check=True,
-                capture_output=True,
+                #capture_output=True,
             )
 
             # Build -> builds the config (AKA generated solution/makefiles) in

@@ -3,10 +3,10 @@ describing CMake builds to generate libraries for python extension
 modules
 
 """
-
-import pathlib
+import os.path
 from dataclasses import dataclass
 
+from setuptools import errors
 from setuptools.extension import Extension
 
 
@@ -25,9 +25,10 @@ class CeMakeExtension(Extension):
       (in pyproject.toml etc); both default to True. Otherwise all extension
       modules are in the root of the project build.
 
-    cmake_lists_root_dir : str, default: "."
-      Path to root CMakeLists.txt, the default assumes it is in the same
-      directory as set setup.py. If using multiple CMakeExtension's, for
+    cmake_lists_root_dir : str,
+      Absolute path to root CMakeLists.txt. This *MUST* be an absolute path as
+      setuptools, pip and build use temp directories and so relative paths will fail.
+      If using multiple CMakeExtension's, for
       example in order to have multiple extension modules in different
       packages ensure you use different CMakeLists.txt in different
       directories. This may change if it causes extra work however for
@@ -45,17 +46,22 @@ class CeMakeExtension(Extension):
     """
 
     # Could make dataclass
-    def __init__(
+    def __init__(  # pylint: disable=keyword-arg-before-vararg
         self,
         package_name: str,
-        *args,
-        cmake_lists_root_dir: str = ".",
+        cmake_lists_root_dir: str,
         targets: list[str] | None = None,  # Could make args?
         generator: str | None = None,
+        *args,
         **kwargs,
     ):
         super().__init__(name=package_name, sources=[], *args, **kwargs)  # type:ignore
         self.package_name = package_name
-        self.cmake_lists_root_dir = pathlib.Path(cmake_lists_root_dir).resolve()
+        if not os.path.isabs(cmake_lists_root_dir):
+            raise errors.SetupError(
+                "cmake_lists_root_dir must be an absolute path but recieved:"
+                f" {cmake_lists_root_dir}"
+            )
+        self.cmake_lists_root_dir = cmake_lists_root_dir
         self.targets = targets
         self.generator = generator
