@@ -1,12 +1,11 @@
 |Doc Status| |Coverage| |GitHub license|
-
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 CEMake
 =========
 
-CEMake is a distutils extension that simplifies building python C extensions
-using CMake instead of the standard ``distutils.Extension`` method 
+CEMake is a setuptools plugin that simplifies building python C extensions
+using CMake
 
 
 
