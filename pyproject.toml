@@ -3,11 +3,11 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cemake"
+name = "cpymake"
 version = "0.1.0"
 readme = "README.rst"
 description = "Allows building of CMake defined Python Extension modules"
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [
     {name = "James Calo", email = "jamesafcalo@gmail.com"},
@@ -25,11 +25,14 @@ classifiers = [
 [project.urls]
 #Homepage = "https://example.com"
 #Documentation = "https://readthedocs.org"
-Repository = "https://github.com/SagaraBattousai/CEMake.git"
+Repository = "https://github.com/SagaraBattousai/cpymake.git"
 #Changelog = "https://github.com/me/spam/blob/master/CHANGELOG.md"
 
 [project.entry-points."distutils.commands"]
-cemake = "cemake.cemake_build_ext:CeMakeBuildExt"
+cpymake = "cpymake.cpymake_build_ext:cpymakeBuildExt"
+
+[tool.setuptools.packages.find]
+exclude = ["docs_build"] # temp
 
 [tool.black]
 preview = true

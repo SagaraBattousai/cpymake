@@ -10,11 +10,13 @@ import sysconfig
 from typing import List
 
 from setuptools import errors
+from setuptools.command.build import SubCommand
 from setuptools.command.build_ext import build_ext
 from cemake.cemake_extension import CeMakeExtension
 
 
-class CeMakeBuildExt(build_ext):
+# Sub Command is a Protocol but we want to explicitly inherit
+class CeMakeBuildExt(build_ext, SubCommand): #pylint: disable=too-many-ancestors
     """Cemake's build_ext class that can be used as a plugin for setuptools
     to build extension modules that use CMake as their
     build (generator) system

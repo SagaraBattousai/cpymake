@@ -1,19 +1,11 @@
 |Doc Status| |Coverage| |GitHub license|
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-CEMake
+cpymake
 =========
 
-CEMake is a setuptools plugin that simplifies building python C extensions
+cpymake is a setuptools plugin that simplifies building python C extensions
 using CMake
-
-
-
-
-
-
-
-
 
 
 
