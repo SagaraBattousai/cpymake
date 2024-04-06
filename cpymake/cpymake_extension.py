@@ -11,7 +11,7 @@ from setuptools.extension import Extension
 
 
 @dataclass
-class CeMakeExtension(Extension):
+class CPyMakeExtension(Extension):
     """This is the main ``Extension`` class for describing cmake python
     extension module builds.
 
@@ -57,11 +57,11 @@ class CeMakeExtension(Extension):
     ):
         super().__init__(name=package_name, sources=[], *args, **kwargs)  # type:ignore
         self.package_name = package_name
-        if not os.path.isabs(cmake_lists_root_dir):
-            raise errors.SetupError(
-                "cmake_lists_root_dir must be an absolute path but recieved:"
-                f" {cmake_lists_root_dir}"
-            )
+        # if not os.path.isabs(cmake_lists_root_dir):
+        #     raise errors.SetupError(
+        #         "cmake_lists_root_dir must be an absolute path but recieved:"
+        #         f" {cmake_lists_root_dir}"
+        #     )
         self.cmake_lists_root_dir = cmake_lists_root_dir
         self.targets = targets
         self.generator = generator
