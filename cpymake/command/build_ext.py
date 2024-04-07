@@ -3,10 +3,9 @@ cpymake's build_ext command for building a python C/C++ extension using CMake
 """
 
 import os
+import shutil
 import subprocess
 import sysconfig
-
-from typing import List
 
 from setuptools import errors
 
@@ -20,6 +19,10 @@ from cpymake.extension import Extension
 
 # NOTE: By not inheriting from setuptools' build_ext (as we'd rather extend distutil's)
 # we have to reimplement a lot of methods but it (could) be worth it
+
+# NOTE: From looking at distutils it looks like self.verbose could be dangerous to use
+# so we will comment out when things are called and leave it to be uncommented
+# if needed
 
 
 # Sub Command is a Protocol but we want to explicitly inherit
@@ -64,10 +67,10 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
     #     ("help-compiler", None, "list available compilers", show_compilers),
     # ]
 
+    # TODO: pass cmake path as option
     # override
     def initialize_options(self):
-        # pylint: disable=attribute-defined-outside-init
-        print("***** Initialize_options Called!")
+        # print("***** Initialize_options Called!")
 
         self.package = None
         self.extensions = None
@@ -86,9 +89,7 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
     # override
     def finalize_options(self):
-        # pylint: disable=attribute-defined-outside-init
-
-        print("***** Finalize_options Called")
+        # print("***** Finalize_options Called")
 
         self.set_undefined_options(
             "build",
@@ -105,6 +106,7 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
         self.extensions = self.distribution.ext_modules or []
 
+        # TODO: See if we should keep this.
         # if os.name == "nt":
         #     if self.debug:
         #         self.build_temp = os.path.join(self.build_temp, "Debug")
@@ -114,8 +116,6 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
         # TODO:
         # defines and undefs
 
-        # NOTE: May want to do it more like how numpy does
-        # (i.e convert to int regardless)
         if isinstance(self.parallel, str):
             try:
                 self.parallel = int(self.parallel)
@@ -124,133 +124,108 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
         # TODO: custom check extension list
 
-        # TODO: Do we need??
-        # for ext in self.extensions:
-        #     ext._full_name = self.get_ext_fullname(ext.name)
-        #     # this is split into two loops in setuptools but why?
-        #     self.ext_map[
-
         if self.editable_mode:
             self.inplace = True
 
-    # Don't call super as we need all custom behaviour
     # override
     def run(self):
-        print("***** Run Called")
+        # print("***** Run Called")
 
-        print(
-            "***** cpymake's build_ext's variables =",
-            f"package = {self.package}",
-            "extensions = printed_later",
-            f"build_lib = {self.build_lib}",
-            f"build_temp = {self.build_temp}",
-            f"plat_name = {self.plat_name}",
-            f"inplace = {self.inplace}",
-            f"editable_mode = {self.editable_mode}",
-            f"define = {self.define}",
-            f"undef = {self.undef}",
-            f"debug = {self.debug}",
-            f"force = {self.force}",
-            f"parallel = {self.parallel}",
-            sep="\n\t",
-        )
-
-        # 'self.extensions', as supplied by setup.py, is a list of
-        # Extension instances.
         if not self.extensions:
             return
 
-        # Ensure that CMake is present and working. Was going to extract
-        # but I think that that is unneccisary
+        # TODO: extract and check if safe elsewhere?!
+        # Ensure that CMake is present and working.
         try:
             subprocess.run(["cmake", "--version"], check=True, capture_output=True)
         except subprocess.CalledProcessError as cpe:
-            raise RuntimeError("Cannot find CMake executable") from cpe
+            raise RuntimeError(
+                "Cannot find CMake executable:\n"
+                f"\tstdout = {cpe.stdout}\n"
+                f"\tstderr = {cpe.stderr}"
+            ) from cpe
 
+        # NOTE: potentially optimise VV
+        os.makedirs(os.path.abspath(self.build_temp), exist_ok=True)
 
-        #TODO: Finish off!!
-        true_inplace, self.inplace = self.inplace, 0
+        # TODO: Finish off!!
+        # NOTE: Whilst there are alternatives to this switch it's not worthwile
+        # The extra work in functions such as (including get_ext_paths) aren't worth
+        # optimising (80/20 rule REMEMBER IT!)
+        local_inplace, self.inplace = self.inplace, 0
 
         self.build_extensions()
-        # VV Happens automatically as inplace automatically modifys build dir
-        # to be inplace :D -> wasted time sad tho.
-        # if self.inplace:
-        #  self.copy_extensions_to_source()
-        # ^^ self.inplace is set in super().finalize_options() to be true
-        # when self.editable_mode is True
+
+        if local_inplace:
+            for ext in self.extensions:
+                inplace_file, regular_file = self.get_ext_paths(ext.name)
+
+                # NOTE: regular file (on windows) is an abspath but inplace isn't
+                # which is okay
+                if os.path.exists(regular_file):
+                    # NOTE: Is this best method (I'm not too keen on high-level utils)
+                    # however it seems optimised.
+                    # Alternitivly we could use cmake -E copy since we're already using
+                    # cmake.
+                    shutil.copy2(regular_file, inplace_file, follow_symlinks=False)
+                else:
+                    # NOTE: May need to change but for now I feel this is acceptable
+                    raise errors.FileError(f"File {regular_file} does not exist")
+
+        self.inplace = local_inplace
 
     # override
     def build_extensions(self):
         self.check_extensions_list(self.extensions)
 
         for extension in self.extensions:
-            print("******", extension)
-            extension_path = os.path.dirname(self.get_ext_fullpath(extension.name))
-            extension_base = os.getcwd()
-
-            #print("extension_dir:", extension_path)#dir)
-            print("extension_path:", extension_path)#dir)
-            print("extension_base:", extension_base)#dir)
-            print("cwd:", os.getcwd())
-            print("build_temp =", self.build_temp)
-            print("full build_temp =", os.path.abspath(self.build_temp))
             extension_suffix = sysconfig.get_config_var("EXT_SUFFIX")
-
-            print("extension fullname =", self.get_ext_fullname(extension.name))
-            print("extension filename =", self.get_ext_filename(extension.name))
-            print("extension fullpath =", self.get_ext_fullpath(extension.name))
 
             # Should I also allow this to be overridable in extension?
             config = "Debug" if self.debug else "Release"
+
             cmake_args = [
                 f"-DCMAKE_BUILD_TYPE={config}",
-                # f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config}={extension_dir}",
-                f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extension_path}",
-                # Needed for windows (more specifically .dll platforms).
-                # It is safe to leave for all systems although will erroneously
-                # add any .exe's created, which shouldn't exist anyway
-                #
-                # May remove for .so systems but without further testing it is
-                # an unnecessary risk to remove
-                # f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{config}={extension_dir}",
-                (
-                    "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY="
-                    # f"$<PATH:ABSOLUTE_PATH,{extension_path},{extension_base}>"
-                    # f"$<PATH:GET_PARENT_PATH,{self.get_ext_fullpath(extension.name)}>"
-                    f"$<PATH:REMOVE_FILENAME,{self.get_ext_fullpath(extension.name)}>"
-                ),
-
-                # f"-DPYTHON_EXTENSION_SUFFIX={extension_suffix}",
-                f"-DPYTHON_EXTENSION={extension_suffix}",
-                #NOTE: VV Doesn't work on windows for some reason (being overwritten)
+                f"-DPYTHON_EXTENSION_SUFFIX={extension_suffix}",
+                # ^^ TODO: wish there was a better way!! plus VV doesn't work
+                # NOTE: VV Doesn't work on windows for some reason (being overwritten)
                 # f"-DCMAKE_SHARED_LIBRARY_SUFFIX={extension_suffix}",
             ]
+
+            ext_output_path = (
+                f"$<PATH:REMOVE_FILENAME,{self.get_ext_fullpath(extension.name)}>"
+            )
+
+            # Should I use config versions? I dont think so but ...
+            if os.name == "nt":
+                cmake_args.append(f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={ext_output_path}")
+            else:
+                cmake_args.append(f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={ext_output_path}")
+
             if extension.generator:
                 cmake_args.append(f"-G {extension.generator}")
 
-            # Config -> outputs in our temp dir
-            os.makedirs(os.path.abspath(self.build_temp), exist_ok=True)
-            print("cmake_path =", os.path.abspath(extension.cmake_lists_root_dir))
-            print(
-                "----- Configure:\n",
+            try:
                 subprocess.run(
                     [
-                        "cmake", os.path.abspath(extension.cmake_lists_root_dir),
-                        *cmake_args
+                        "cmake",
+                        os.path.abspath(extension.cmake_lists_root_dir),
+                        *cmake_args,
                     ],
-                    # cwd=self.build_temp,
-                    cwd=os.path.abspath(self.build_temp),
-                    # check=True,
+                    cwd=self.build_temp,
+                    # cwd=os.path.abspath(self.build_temp),
+                    check=True,
                     capture_output=True,
-                ),
-            )
+                )
+            except subprocess.CalledProcessError as cpe:
+                raise RuntimeError(
+                    "CMake Configure failed:\n"
+                    f"\tstdout = {cpe.stdout}\n"
+                    f"\tstderr = {cpe.stderr}"
+                ) from cpe
 
-            print("~~~~~~~ CWD=", os.getcwd())
-
-            # Build -> builds the config (AKA generated solution/makefiles) in
-            # our temp dir but outputs have already been setup in cmake_args
-            # TODO: Update
             build_cmd = ["cmake", "--build", ".", "--config", config]
+
             if extension.targets is not None:
                 build_cmd.append("--target")
                 # TODO: Check if it requires args as a separate strings or
@@ -262,19 +237,20 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
             else:
                 build_cmd.append("-j")
 
-            print("##### pre-run")
-            print(
-                "----- Configure:\n",
+            try:
                 subprocess.run(
                     build_cmd,
-                    # check=True
-                    cwd=os.path.abspath(self.build_temp),
-                ),  # cwd=self.build_temp,
-            )
-            print("##### post-run")
-
-            ipf,rgf = self.get_ext_paths(extension.name)
-            print("&&&& regular_file =", rgf, "\n\texists?:", os.path.exists(rgf))
+                    cwd=self.build_temp,
+                    # cwd=os.path.abspath(self.build_temp),
+                    capture_output=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as cpe:
+                raise RuntimeError(
+                    "CMake Build failed:\n"
+                    f"\tstdout = {cpe.stdout}\n"
+                    f"\tstderr = {cpe.stderr}"
+                ) from cpe
 
     # TODO: These three functions need a rewrite! I think we can use special cmake
     # runs, unfortunatly I'm not 100% sure plus it may well
@@ -286,7 +262,7 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
     # override
     def get_output_mapping(self) -> dict[str, str]:
-        print("***** Get_output_mapping Called")
+        # print("***** Get_output_mapping Called")
 
         # They sort an interator and convert to dict but lets just make it here
 
@@ -304,7 +280,7 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
     # override
     def get_outputs(self) -> list[str]:
-        print("****** Get_outputs Called")
+        # print("****** Get_outputs Called")
 
         # NOTE: Ideally we would also get clibs that the CMake extension requires/builds
         # unfortunatly I dont yet see how so for now.....
@@ -318,13 +294,12 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
         outputs = []
         for ext in self.extensions:
             outputs.append(self.get_ext_fullpath(ext.name))
-        print("***** Outputs =", outputs)
 
         return outputs
 
     # override
     def get_source_files(self):
-        print("***** Get_source_files Called")
+        # print("***** Get_source_files Called")
 
         self.check_extensions_list(self.extensions)
         # TODO: For now this is all we can do
@@ -342,7 +317,7 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
         Raise Setuptools' SetupError if invalid extension found
         """
 
-        print("***** Check_extensions_list Called")
+        # print("***** Check_extensions_list Called")
 
         if not isinstance(extensions, list):
             raise errors.SetupError(

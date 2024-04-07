@@ -434,7 +434,8 @@ disable=raw-checker-failed,
         missing-function-docstring,
         fixme,
         too-many-arguments,
-        invalid-name #for cpymake as build_XYZ is convention
+        invalid-name, # for cpymake as build_XYZ is convention
+        attribute-defined-outside-init, # for cpymake as self.XYZ is set outside init 
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
