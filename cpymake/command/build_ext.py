@@ -198,27 +198,46 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
             #     extension.package_name
             # )
             # extension_dir = self.get_extension_build_directory(extension.name)
-            extension_dir = "C:\\Users\\james\\" + self.build_lib
+            # extension_dir = os.path.abspath(
+            #     os.path.dirname(self.get_ext_fullpath(extension.name))
+            # )
+            # extension_path = "apep" #os.path.dirname(self.get_ext_fullpath(extension.name))
+            extension_path = os.path.dirname(self.get_ext_fullpath(extension.name))
+            extension_base = os.getcwd() #os.path.abspath(self.build_lib)
+
+            # print("extension_dir:", extension_path)#dir)
+            print("extension_path:", extension_path)#dir)
+            print("extension_base:", extension_base)#dir)
+            print("cwd:", os.getcwd())
             extension_suffix = (
                 # self.extension_suffix  # sysconfig.get_config_var("EXT_SUFFIX")
                 sysconfig.get_config_var("EXT_SUFFIX")
             )
             print("extension fullname =", self.get_ext_fullname(extension.name))
             print("extension filename =", self.get_ext_filename(extension.name))
+            print("extension fullpath =", self.get_ext_fullpath(extension.name))
 
             # Should I also allow this to be overridable in extension?
             config = "Debug" if self.debug else "Release"
             cmake_args = [
                 f"-DCMAKE_BUILD_TYPE={config}",
-                f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config}={extension_dir}",
+                # f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{config}={extension_dir}",
+                f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extension_path}",
                 # Needed for windows (more specifically .dll platforms).
                 # It is safe to leave for all systems although will erroneously
                 # add any .exe's created, which shouldn't exist anyway
                 #
                 # May remove for .so systems but without further testing it is
                 # an unnecessary risk to remove
-                f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{config}={extension_dir}",
-                f"-DPYTHON_EXTENSION_SUFFIX={extension_suffix}",
+                # f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{config}={extension_dir}",
+                (
+                    "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY="
+                    f"$<PATH:ABSOLUTE_PATH,{extension_path},{extension_base}>"
+                ),
+                # f"-DPYTHON_EXTENSION_SUFFIX={extension_suffix}",
+                f"-DPYTHON_EXTENSION={extension_suffix}",
+                #NOTE: VV Doesn't work on windows for some reason (being overwritten)
+                # f"-DCMAKE_SHARED_LIBRARY_SUFFIX={extension_suffix}",
             ]
             if extension.generator:
                 cmake_args.append(f"-G {extension.generator}")
@@ -261,11 +280,6 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
             )
             print("##### post-run")
 
-            print("====== dumb test")
-            f = open(self.build_lib + os.sep + "works.pyd", "wb")
-            f.write(b"dll")
-            f.close()
-
     # TODO: These three functions need a rewrite! I think we can use special cmake
     # runs, unfortunatly I'm not 100% sure plus it may well
     # be considered "a side affect" although not really? but i guess configure is
@@ -284,17 +298,16 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
         if not self.inplace:
             return {}
 
-        build_py = self.get_finalized_command("build_py")
         output_mapping = {}
 
         for ext in self.extensions:
-            inplace_file, regular_file = self._get_inplace_equivalent(build_py, ext)
+            inplace_file, regular_file = self.get_ext_paths(ext.name)
             output_mapping[regular_file] = inplace_file
 
         return output_mapping
 
     # override
-    def get_outputs(self) -> List[str]:
+    def get_outputs(self) -> list[str]:
         print("****** Get_outputs Called")
 
         # NOTE: Ideally we would also get clibs that the CMake extension requires/builds
@@ -349,7 +362,7 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
             )
 
     # -- Name generators -----------------------------------------------
-    def get_ext_fullname(self, ext_name:str) -> str:
+    def get_ext_fullname(self, ext_name: str) -> str:
         """Adds the `package.` prefix"""
         if self.package is None:
             return ext_name
@@ -369,36 +382,36 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
         return os.path.join(*ext_path) + ext_suffix
 
+    def get_ext_paths(self, ext_name) -> tuple[str, str]:
+        fullname = self.get_ext_fullname(ext_name)
+        modpath = fullname.split(".")
+
+        # TODO: Check for bugs as original code only used last elem of modpath
+        filename = self.get_ext_filename(fullname)
+        package = ".".join(modpath[:-1])
+
+        build_py = self.get_finalized_command("build_py")
+        package_dir = build_py.get_package_dir(package)  # type: ignore
+
+        # NOTE: os.path.basename required with this version. Depends on whether
+        # os.path.join (with multiple args) has greater complexity than
+        # os.path.basename (depends on whether concat is more complex than
+        # iteration (depending on C implementation))
+        inplace_file = os.path.join(package_dir, os.path.basename(filename))
+        regular_file = os.path.join(self.build_lib, filename)
+        return (inplace_file, regular_file)
+
     def get_ext_fullpath(self, ext_name: str) -> str:
         """Returns the path of the filename for a given extension.
 
         The file is located in `build_lib` or directly in the package
         (inplace option).
         """
-        fullname = self.get_ext_fullname(ext_name)
-        modpath = fullname.split(".")
-
-        # Maybe I'm missing something because doesnt this already handle splitting?
-        # Maybe theres something more complex with certain inputs so
-        #TODO: Check if we can optimise but rememeber 80/20 ....
-        filename = self.get_ext_filename(modpath[-1])
+        inplace_path, regular_path = self.get_ext_paths(ext_name)
 
         if not self.inplace:
-            # no further work needed
-            # returning :
-            #   build_dir/package/path/filename
-            # filename = os.path.join(*modpath[:-1] + [filename])
-            filename = os.path.join(*modpath[:-1], filename)
-            return os.path.join(self.build_lib, filename)
+            # returning: build_dir/package/path/filename
+            return regular_path
 
-        # the inplace option requires to find the package directory
-        # using the build_py command for that
-        package = ".".join(modpath[:-1])
-        build_py = self.get_finalized_command("build_py")
-
-        #VV ignore simpler(?) than importing and type asserting setuptools' build_py
-        package_dir = os.path.abspath(build_py.get_package_dir(package)) # type:ignore
-
-        # returning
-        #   package_dir/filename
-        return os.path.join(package_dir, filename)
+        # returning: package_dir/filename
+        return os.path.abspath(inplace_path)
