@@ -3,30 +3,27 @@ cpymake's build_ext command for building a python C/C++ extension using CMake
 """
 
 import os
-import pathlib
 import subprocess
 import sysconfig
 
 from typing import List
 
 from setuptools import errors
+
+# VV Whilst a build_ext it's different enough to just extend from Command
+# (although distutils' original is way better)
+# NOTE: May wish to revert for other os' like darwin (mac?)
+# from setuptools.command.build_ext import build_ext
+from setuptools import Command
 from setuptools.command.build import SubCommand
-from setuptools.command.build_ext import build_ext
-from cpymake.cpymake_extension import CPyMakeExtension
+from cpymake.extension import Extension
 
-
-# NOTE:
-#   Whilst we do not use a lot of the variables set in setuptools' build_ext
-# and distutils' build_ext (although a few more of those are used) it could be safer to
-# just call their version in initalize and finalize options but at the same time ...
-# then again what hppens if they move more stuff from distutils to setuptools and change
-# the way some options are used (such as build-temp).
-#   Ideally we would just inherit distutils' version but that is deprecated so....
-#   Ah Forget it we're gonna rewrte all the *_options functions!
+# NOTE: By not inheriting from setuptools' build_ext (as we'd rather extend distutil's)
+# we have to reimplement a lot of methods but it (could) be worth it
 
 
 # Sub Command is a Protocol but we want to explicitly inherit
-class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancestors
+class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attributes
     """CPyMake's build_ext class that can be used as a plugin for setuptools
     to build extension modules that use CMake as their build (generator) system
     """
@@ -48,8 +45,10 @@ class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancest
         (
             "inplace",
             "i",
-            "ignore build-lib and put compiled extensions into the source "
-            + "directory alongside your pure Python modules",
+            (
+                "ignore build-lib and put compiled extensions into the source "
+                "directory alongside your pure Python modules"
+            ),
         ),
         ("define=", "D", "C preprocessor macros to define"),
         ("undef=", "U", "C preprocessor macros to undefine"),
@@ -68,7 +67,6 @@ class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancest
     # override
     def initialize_options(self):
         # pylint: disable=attribute-defined-outside-init
-
         print("***** Initialize_options Called!")
 
         self.package = None
@@ -79,10 +77,6 @@ class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancest
         self.plat_name = None
         self.inplace = 0
         self.editable_mode = False
-        # self.ext_map = {} #<- I don't think we need this!
-        # self.ext_map = {}
-        # ^^ Irritatingly if we just add this we can use setuptools functions
-        # that expect this variable
 
         self.define = None
         self.undef = None
@@ -107,7 +101,7 @@ class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancest
         )
 
         if self.package is None:
-            self.package = self.distribution.ext_package
+            self.package = self.distribution.ext_package  # <- what is this !!?
 
         self.extensions = self.distribution.ext_modules or []
 
@@ -204,11 +198,13 @@ class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancest
             #     extension.package_name
             # )
             # extension_dir = self.get_extension_build_directory(extension.name)
-            extension_dir = self.build_lib
+            extension_dir = "C:\\Users\\james\\" + self.build_lib
             extension_suffix = (
                 # self.extension_suffix  # sysconfig.get_config_var("EXT_SUFFIX")
                 sysconfig.get_config_var("EXT_SUFFIX")
             )
+            print("extension fullname =", self.get_ext_fullname(extension.name))
+            print("extension filename =", self.get_ext_filename(extension.name))
 
             # Should I also allow this to be overridable in extension?
             config = "Debug" if self.debug else "Release"
@@ -258,11 +254,17 @@ class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancest
             print("##### pre-run")
             print(
                 "----- Configure:\n",
-                subprocess.run(build_cmd, 
-                               # check=True
-                               )  # cwd=self.build_temp,
+                subprocess.run(
+                    build_cmd,
+                    # check=True
+                ),  # cwd=self.build_temp,
             )
             print("##### post-run")
+
+            print("====== dumb test")
+            f = open(self.build_lib + os.sep + "works.pyd", "wb")
+            f.write(b"dll")
+            f.close()
 
     # TODO: These three functions need a rewrite! I think we can use special cmake
     # runs, unfortunatly I'm not 100% sure plus it may well
@@ -335,12 +337,68 @@ class CPyMakeBuildExt(build_ext, SubCommand):  # pylint: disable=too-many-ancest
 
         if not isinstance(extensions, list):
             raise errors.SetupError(
-                "'ext_modules' argument must be a list of CeMakeExtension instances "
+                "'ext_modules' argument must be a list of cpymake's "
+                "Extension instances "
                 f"however ext_modules had type {type(extensions)}"
             )
 
-        if not all(isinstance(ext, CPyMakeExtension) for ext in extensions):
+        if not all(isinstance(ext, Extension) for ext in extensions):
             raise errors.SetupError(
                 "Each element of 'ext_modules' must be an instance of "
-                "the CeMakeExtension class"
+                "the cpymake's Extension class"
             )
+
+    # -- Name generators -----------------------------------------------
+    def get_ext_fullname(self, ext_name:str) -> str:
+        """Adds the `package.` prefix"""
+        if self.package is None:
+            return ext_name
+
+        return self.package + "." + ext_name
+
+    def get_ext_filename(self, ext_name: str) -> str:
+        """Converts the name of an extension (eg. "foo.bar") into the name
+        of the file from which it will be loaded (eg. "foo/bar.so", or
+        "foo\bar.pyd").
+        """
+
+        ext_path = ext_name.split(".")
+        ext_suffix = os.getenv("CPYMAKE_EXT_SUFFIX") or sysconfig.get_config_var(
+            "EXT_SUFFIX"
+        )
+
+        return os.path.join(*ext_path) + ext_suffix
+
+    def get_ext_fullpath(self, ext_name: str) -> str:
+        """Returns the path of the filename for a given extension.
+
+        The file is located in `build_lib` or directly in the package
+        (inplace option).
+        """
+        fullname = self.get_ext_fullname(ext_name)
+        modpath = fullname.split(".")
+
+        # Maybe I'm missing something because doesnt this already handle splitting?
+        # Maybe theres something more complex with certain inputs so
+        #TODO: Check if we can optimise but rememeber 80/20 ....
+        filename = self.get_ext_filename(modpath[-1])
+
+        if not self.inplace:
+            # no further work needed
+            # returning :
+            #   build_dir/package/path/filename
+            # filename = os.path.join(*modpath[:-1] + [filename])
+            filename = os.path.join(*modpath[:-1], filename)
+            return os.path.join(self.build_lib, filename)
+
+        # the inplace option requires to find the package directory
+        # using the build_py command for that
+        package = ".".join(modpath[:-1])
+        build_py = self.get_finalized_command("build_py")
+
+        #VV ignore simpler(?) than importing and type asserting setuptools' build_py
+        package_dir = os.path.abspath(build_py.get_package_dir(package)) # type:ignore
+
+        # returning
+        #   package_dir/filename
+        return os.path.join(package_dir, filename)

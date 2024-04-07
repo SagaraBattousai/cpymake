@@ -29,7 +29,7 @@ Repository = "https://github.com/SagaraBattousai/cpymake.git"
 #Changelog = "https://github.com/me/spam/blob/master/CHANGELOG.md"
 
 [project.entry-points."distutils.commands"]
-cpymake = "cpymake.cpymake_build_ext:CPyMakeBuildExt"
+cpymake = "cpymake.command.build_ext:build_ext"
 
 [tool.setuptools.packages.find]
 exclude = ["docs_build"] # temp

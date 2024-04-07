@@ -3,15 +3,15 @@ describing CMake builds to generate libraries for python extension
 modules
 
 """
-import os.path
+# import os.path
 from dataclasses import dataclass
 
 from setuptools import errors
-from setuptools.extension import Extension
+from setuptools.extension import Extension as _Extension
 
 
 @dataclass
-class CPyMakeExtension(Extension):
+class Extension(_Extension):
     """This is the main ``Extension`` class for describing cmake python
     extension module builds.
 
