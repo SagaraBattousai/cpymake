@@ -105,11 +105,11 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
         self.extensions = self.distribution.ext_modules or []
 
-        if os.name == "nt":
-            if self.debug:
-                self.build_temp = os.path.join(self.build_temp, "Debug")
-            else:
-                self.build_temp = os.path.join(self.build_temp, "Release")
+        # if os.name == "nt":
+        #     if self.debug:
+        #         self.build_temp = os.path.join(self.build_temp, "Debug")
+        #     else:
+        #         self.build_temp = os.path.join(self.build_temp, "Release")
 
         # TODO:
         # defines and undefs
@@ -167,6 +167,10 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
         except subprocess.CalledProcessError as cpe:
             raise RuntimeError("Cannot find CMake executable") from cpe
 
+
+        #TODO: Finish off!!
+        true_inplace, self.inplace = self.inplace, 0
+
         self.build_extensions()
         # VV Happens automatically as inplace automatically modifys build dir
         # to be inplace :D -> wasted time sad tho.
@@ -177,42 +181,21 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
     # override
     def build_extensions(self):
-        print("****** Build_extensions Called")
-
-        # origional_package = self.package
-
-        # Really useful to see what additional options we can use
-        # print('***', *(self.user_options), sep="\n")
-        # Same as python setup.py build_ext --help
-
-        # First, sanity-check the 'extensions' list
         self.check_extensions_list(self.extensions)
-
-        print("***** print each ext:")
 
         for extension in self.extensions:
             print("******", extension)
-            # Looks dodgy but it's been years since I made this so...
-            # Actually maybe not...
-            # self.package = (  # pylint: disable=attribute-defined-outside-init
-            #     extension.package_name
-            # )
-            # extension_dir = self.get_extension_build_directory(extension.name)
-            # extension_dir = os.path.abspath(
-            #     os.path.dirname(self.get_ext_fullpath(extension.name))
-            # )
-            # extension_path = "apep" #os.path.dirname(self.get_ext_fullpath(extension.name))
             extension_path = os.path.dirname(self.get_ext_fullpath(extension.name))
-            extension_base = os.getcwd() #os.path.abspath(self.build_lib)
+            extension_base = os.getcwd()
 
-            # print("extension_dir:", extension_path)#dir)
+            #print("extension_dir:", extension_path)#dir)
             print("extension_path:", extension_path)#dir)
             print("extension_base:", extension_base)#dir)
             print("cwd:", os.getcwd())
-            extension_suffix = (
-                # self.extension_suffix  # sysconfig.get_config_var("EXT_SUFFIX")
-                sysconfig.get_config_var("EXT_SUFFIX")
-            )
+            print("build_temp =", self.build_temp)
+            print("full build_temp =", os.path.abspath(self.build_temp))
+            extension_suffix = sysconfig.get_config_var("EXT_SUFFIX")
+
             print("extension fullname =", self.get_ext_fullname(extension.name))
             print("extension filename =", self.get_ext_filename(extension.name))
             print("extension fullpath =", self.get_ext_fullpath(extension.name))
@@ -232,8 +215,11 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
                 # f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{config}={extension_dir}",
                 (
                     "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY="
-                    f"$<PATH:ABSOLUTE_PATH,{extension_path},{extension_base}>"
+                    # f"$<PATH:ABSOLUTE_PATH,{extension_path},{extension_base}>"
+                    # f"$<PATH:GET_PARENT_PATH,{self.get_ext_fullpath(extension.name)}>"
+                    f"$<PATH:REMOVE_FILENAME,{self.get_ext_fullpath(extension.name)}>"
                 ),
+
                 # f"-DPYTHON_EXTENSION_SUFFIX={extension_suffix}",
                 f"-DPYTHON_EXTENSION={extension_suffix}",
                 #NOTE: VV Doesn't work on windows for some reason (being overwritten)
@@ -243,11 +229,17 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
                 cmake_args.append(f"-G {extension.generator}")
 
             # Config -> outputs in our temp dir
+            os.makedirs(os.path.abspath(self.build_temp), exist_ok=True)
+            print("cmake_path =", os.path.abspath(extension.cmake_lists_root_dir))
             print(
                 "----- Configure:\n",
                 subprocess.run(
-                    ["cmake", extension.cmake_lists_root_dir, *cmake_args],
+                    [
+                        "cmake", os.path.abspath(extension.cmake_lists_root_dir),
+                        *cmake_args
+                    ],
                     # cwd=self.build_temp,
+                    cwd=os.path.abspath(self.build_temp),
                     # check=True,
                     capture_output=True,
                 ),
@@ -276,9 +268,13 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
                 subprocess.run(
                     build_cmd,
                     # check=True
+                    cwd=os.path.abspath(self.build_temp),
                 ),  # cwd=self.build_temp,
             )
             print("##### post-run")
+
+            ipf,rgf = self.get_ext_paths(extension.name)
+            print("&&&& regular_file =", rgf, "\n\texists?:", os.path.exists(rgf))
 
     # TODO: These three functions need a rewrite! I think we can use special cmake
     # runs, unfortunatly I'm not 100% sure plus it may well
@@ -411,7 +407,9 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
 
         if not self.inplace:
             # returning: build_dir/package/path/filename
-            return regular_path
+            # return regular_path
+            return os.path.abspath(regular_path)
+            # return regular_path
 
         # returning: package_dir/filename
         return os.path.abspath(inplace_path)
