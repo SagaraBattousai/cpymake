@@ -148,7 +148,6 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
         # NOTE: potentially optimise VV
         os.makedirs(os.path.abspath(self.build_temp), exist_ok=True)
 
-        # TODO: Finish off!!
         # NOTE: Whilst there are alternatives to this switch it's not worthwile
         # The extra work in functions such as (including get_ext_paths) aren't worth
         # optimising (80/20 rule REMEMBER IT!)
@@ -170,7 +169,11 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
                     shutil.copy2(regular_file, inplace_file, follow_symlinks=False)
                 else:
                     # NOTE: May need to change but for now I feel this is acceptable
-                    raise errors.FileError(f"File {regular_file} does not exist")
+                    raise errors.FileError(
+                        f"File {regular_file} does not exist.\n"
+                        f"list of files in {regular_file} directory is:\n"
+                        f"\t{os.listdir(os.path.dirname(regular_file))}"
+                    )
 
         self.inplace = local_inplace
 
@@ -224,13 +227,21 @@ class build_ext(Command, SubCommand):  # pylint: disable=too-many-instance-attri
                     f"\tstderr = {cpe.stderr}"
                 ) from cpe
 
-            build_cmd = ["cmake", "--build", ".", "--config", config]
+            build_cmd = [
+                "cmake",
+                "--build",
+                ".",
+                "--config",
+                config,
+                "--target",
+                extension.target,
+            ]
 
-            if extension.targets is not None:
-                build_cmd.append("--target")
-                # TODO: Check if it requires args as a separate strings or
-                # if Joint is okay
-                build_cmd.append(" ".join(extension.targets))
+            # if extension.targets is not None:
+            #     build_cmd.append("--target")
+            #     # TODO: Check if it requires args as a separate strings or
+            #     # if Joint is okay
+            #     build_cmd.append(" ".join(extension.targets))
 
             if self.parallel:
                 build_cmd.append(f"-j {self.parallel}")
